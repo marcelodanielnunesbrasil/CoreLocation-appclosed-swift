@@ -8,26 +8,128 @@
 
 import UIKit
 import CoreData
+import CoreLocation
+import NotificationCenter
+import UserNotifications
+import UserNotificationsUI
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, CLLocationManagerDelegate {
 
     var window: UIWindow?
+    
+    let locationManager = CLLocationManager()
+    
+    var lat = 0.0;
+    var lng = 0.0;
 
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplicationLaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
+        application.setMinimumBackgroundFetchInterval(UIApplicationBackgroundFetchIntervalMinimum)
+        isAuthorizedtoGetUserLocation()
+        
+        if CLLocationManager.locationServicesEnabled() {
+            locationManager.allowsBackgroundLocationUpdates = true
+            locationManager.delegate = self
+            locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+            locationManager.startUpdatingLocation()
+        }
+        
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { (granted, error) in
+        }
+        
+        let notreDame = CLCircularRegion(center: CLLocationCoordinate2D(latitude: -1.4203621, longitude: -48.4484415), radius: 200, identifier: "belem")
+        locationManager.startMonitoring(for: notreDame)
+        
         return true
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
         // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
         // Use this method to pause ongoing tasks, disable timers, and invalidate graphics rendering callbacks. Games should use this method to pause the game.
+    
+    }
+    
+    //if we have no permission to access user location, then ask user for permission.
+    func isAuthorizedtoGetUserLocation() {
+        
+        if CLLocationManager.authorizationStatus() != .authorizedWhenInUse     {
+            locationManager.requestAlwaysAuthorization()
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
+        
+        print("enter region")
+        
+
+        let requestUrl = URL(string: "https://mobilleone.com.br?message=fechado&lat=\(manager.location?.coordinate.latitude ?? 0)&lng=\(manager.location?.coordinate.longitude ?? 0)&region=\(region.identifier)")
+        let request = URLRequest(url: requestUrl!)
+        
+        let task = URLSession.shared.dataTask(with: request) {
+            (data, response, error) in
+            if error == nil, let usableData = data {
+                let responseJSON = try? JSONSerialization.jsonObject(with: usableData, options: [])
+                if (responseJSON as? [String: Any]) != nil{
+                    print(responseJSON as Any)
+                }
+            }
+        }
+        task.resume()
+   
+    
+ 
+        
+        let content = UNMutableNotificationContent()
+
+        content.title = "Myorder"
+        content.body = "Bem vindo ao restaurante tal"
+        content.sound = UNNotificationSound.default()
+
+        // Deliver the notification in five seconds.
+        let trigger = UNTimeIntervalNotificationTrigger.init(timeInterval: 5, repeats: false)
+        let request2 = UNNotificationRequest.init(identifier: "FiveSecond", content: content, trigger: trigger)
+
+        // Schedule the notification.
+        let center = UNUserNotificationCenter.current()
+        center.add(request2) { (error) in
+            print(error as Any)
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
+        print("Exit region")
+    }
+    
+    //this method will be called each time when a user change his location access preference.
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        if status == .authorizedWhenInUse {
+            print("User allowed us to access location")
+        }
+    }
+    
+    
+    //this method is called by the framework on         locationManager.requestLocation();
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        let loc: CLLocationCoordinate2D = manager.location!.coordinate
+        print("location = \(loc.latitude) \(loc.longitude)")
+        self.lat = loc.latitude
+        self.lng = loc.longitude
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("Did location updates is called but failed getting location \(error)")
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
-        // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
-        // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+        print("applicationDidEnterBackground")
+
+    }
+    
+    func application(_ application: UIApplication, performFetchWithCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+       
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
@@ -36,9 +138,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+     
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
+         print("applicationWillTerminate")
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
         // Saves changes in the application's managed object context before the application terminates.
         self.saveContext()
